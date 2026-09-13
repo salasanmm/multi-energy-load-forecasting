@@ -4,16 +4,13 @@ import os
 import importlib.util
 
 from get_config import get_config
-try:
-    from test_model.TimeMixer import Model
-except ModuleNotFoundError:
-    _model_file = os.path.join(os.path.dirname(__file__), "test_model", "MFGT-Net.py")
-    _model_spec = importlib.util.spec_from_file_location("mftg_net_impl", _model_file)
-    if _model_spec is None or _model_spec.loader is None:
-        raise ImportError(f"Cannot load proposed model from {_model_file}")
-    _model_module = importlib.util.module_from_spec(_model_spec)
-    _model_spec.loader.exec_module(_model_module)
-    Model = _model_module.Model
+_model_file = os.path.join(os.path.dirname(__file__), "test_model", "MFGT-Net.py")
+_model_spec = importlib.util.spec_from_file_location("mftg_net_impl", _model_file)
+if _model_spec is None or _model_spec.loader is None:
+    raise ImportError(f"Cannot load proposed model from {_model_file}")
+_model_module = importlib.util.module_from_spec(_model_spec)
+_model_spec.loader.exec_module(_model_module)
+Model = _model_module.Model
 from train import args, device, plow, channel_metrics, format_metrics, apply_refiner_mode
 from util import DataLoaderS
 

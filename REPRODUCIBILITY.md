@@ -70,7 +70,10 @@ protocol, and reproducibility utilities. Generated checkpoints are ignored by
 Git and can be regenerated with the commands above.
 
 The original project contains source files for DLinear, CFC, FITS, TSMixer,
-TimesNet, TimeMixer, iTransformer, FiLM, Mamba, and MFTG-Net. SparseTSF and
+TimesNet, TimeMixer, iTransformer, FiLM, Mamba, and MFTG-Net. The laboratory
+legacy TimeMixer source and original checkpoints are archived under
+`artifacts/original_time_mixer/` with their original 8:1:1 protocol. They are
+reference artifacts and are not the revised MFTG-Net results. SparseTSF and
 TimeXer are listed in the manuscript but were not present in the original
 source tree; their external implementation and version must be recorded before
 claiming source-level reproduction of those two baselines.

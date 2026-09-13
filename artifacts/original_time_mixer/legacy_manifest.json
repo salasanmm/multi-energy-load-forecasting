@@ -1,0 +1,41 @@
+{
+  "model": "TimeMixer",
+  "provenance": "Laboratory legacy baseline recovered from 负荷预测（原件）(2).zip",
+  "source_file": "test_model/TimeMixer.py",
+  "protocol": {
+    "train_ratio": 0.8,
+    "validation_ratio": 0.1,
+    "test_ratio": 0.1,
+    "lookback_hours": 168,
+    "input_features": 12,
+    "target_features": 3,
+    "seed": 2020,
+    "batch_size": 256,
+    "max_epochs": 60,
+    "optimizer": "Adam",
+    "learning_rate": 0.00016,
+    "weight_decay": 0.00001,
+    "gradient_clip_norm": 5.0,
+    "scheduler": {"type": "ReduceLROnPlateau", "factor": 0.8, "patience": 6, "mode": "min"},
+    "checkpoint_selection": "legacy script overwrote the checkpoint during training; final saved state",
+    "independent_runs": 1
+  },
+  "architecture": {
+    "d_model": 64,
+    "d_ff": 64,
+    "e_layers": 3,
+    "down_sampling_window": 2,
+    "down_sampling_layers": 2,
+    "down_sampling_method": "avg",
+    "moving_avg": 3,
+    "dropout": 0.1,
+    "channel_independence": false
+  },
+  "source_sha256": "557C8139690BFA144007E70A57051777792F93F4CD508C50756F3A5593F96BFD",
+  "checkpoints": {
+    "24": {"path": "TimeMixer_24_168/model/model_lnn.pt", "sha256": "61D3A0AFC0E6CDAE7B5003CDE997F1FD8127C0D8A5DCF28BEB79320B39C34FB7"},
+    "48": {"path": "TimeMixer_48_168/model/model_lnn.pt", "sha256": "A1A3F8A91D065F4309085D2AD8B39D59496A32F44C688F8A38BE2865379F9ECC"},
+    "72": {"path": "TimeMixer_72_168/model/model_lnn.pt", "sha256": "7764C680651C2DC141058D20233A7C61486405F8D06E32D693F008F7640EAEE2"},
+    "96": {"path": "TimeMixer_96_168/model/model_lnn.pt", "sha256": "6E14E874F6DA3C24AC0DDE9E484B00499B393D114100E52F9329C02799DBADB7"}
+  }
+}

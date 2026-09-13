@@ -44,7 +44,7 @@ the corresponding table result.
 | FITS | `test_model/FITS_copy.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `individual=True`, `base_T=24`, `H_order=6` | included |
 | TSMixer | `test_model/TSMixer.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=64`, `e_layers=2`, `dropout=0.2` | included |
 | TimesNet | `test_model/TimesNet.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=32`, `e_layers=2`, `d_ff=16`, `num_kernels=4`, `top_k=5`, `dropout=0.1` | included |
-| TimeMixer | `test_model/timemixerpgf.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=64`, `d_ff=64`, `e_layers=3`, `down_sampling_window=2`, `down_sampling_layers=2`, average pooling, `dropout=0.1` | included; refiner flags must be recorded |
+| TimeMixer | `test_model/TimeMixer.py` (legacy) and `test_model/timemixerpgf.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=64`, `d_ff=64`, `e_layers=3`, `down_sampling_window=2`, `down_sampling_layers=2`, average pooling, `dropout=0.1` | legacy source and checkpoints archived; refiner flags must be recorded for any revised run |
 | iTransformer | `test_model/iTransformer.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`; attention and feed-forward dimensions require the run manifest | source included; exact run config required |
 | FiLM | `test_model/FiLM.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, multiscale factors `[1,2,4]`, HiPPO order `256`, spectral modes up to `32`, ratio `0.5` | included |
 | TimeXer | no source file in the original project | `seq_len=168`, `pred_len=H`, `enc_in=12` | external implementation and commit must be recorded |

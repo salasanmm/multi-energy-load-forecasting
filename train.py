@@ -15,20 +15,16 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import torch
 import torch.nn as nn
 # from net import gtnet
-try:
-    # Keep compatibility with the original repository layout.
-    from test_model.TimeMixer import Model
-except ModuleNotFoundError:
-    # The supplied project stores the proposed model as ``MFGT-Net.py``;
-    # load it explicitly because the hyphenated filename is not importable
-    # with normal Python module syntax.
-    _model_file = os.path.join(os.path.dirname(__file__), 'test_model', 'MFGT-Net.py')
-    _model_spec = importlib.util.spec_from_file_location('mftg_net_impl', _model_file)
-    if _model_spec is None or _model_spec.loader is None:
-        raise ImportError(f'Cannot load proposed model from {_model_file}')
-    _model_module = importlib.util.module_from_spec(_model_spec)
-    _model_spec.loader.exec_module(_model_module)
-    Model = _model_module.Model
+# The proposed model is stored in a hyphenated filename, so it must be loaded
+# explicitly. Keep this independent from the separately released TimeMixer
+# baseline in ``test_model/TimeMixer.py``.
+_model_file = os.path.join(os.path.dirname(__file__), 'test_model', 'MFGT-Net.py')
+_model_spec = importlib.util.spec_from_file_location('mftg_net_impl', _model_file)
+if _model_spec is None or _model_spec.loader is None:
+    raise ImportError(f'Cannot load proposed model from {_model_file}')
+_model_module = importlib.util.module_from_spec(_model_spec)
+_model_spec.loader.exec_module(_model_module)
+Model = _model_module.Model
 import numpy as np
 from Save_result import show_pred
 from util import *
