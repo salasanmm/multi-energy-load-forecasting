@@ -1,6 +1,9 @@
 # Reproducibility protocol
 
-This file records the protocol used for the revised MFTG-Net experiments.
+This file records the protocol used for the revised MFTG-Net experiments. The
+current modified model is loaded from `test_model/MFGT-Net.py` by the root
+`train.py` entry point; the separate legacy TimeMixer archive is not used by
+the revised model.
 The model-by-model settings and manuscript parameter counts are maintained in
 [`BASELINE_CONFIGS.md`](BASELINE_CONFIGS.md) and
 [`configs/baseline_registry.json`](configs/baseline_registry.json).
@@ -65,9 +68,13 @@ invent averages for them.
 
 ## Repository scope
 
-The repository includes the source code, data files, dependency list, fixed
-protocol, and reproducibility utilities. Generated checkpoints are ignored by
-Git and can be regenerated with the commands above.
+The repository includes the current modified MFTG-Net source code, data files,
+dependency list, fixed protocol, and reproducibility utilities. Validated
+MFTG-Net checkpoints were not present in the supplied modified project, so
+generated checkpoints are ignored by Git and can be regenerated with the
+commands above. The legacy TimeMixer checkpoints archived in
+`artifacts/original_time_mixer/` are explicitly labeled and are not revised
+MFTG-Net results.
 
 The original project contains source files for DLinear, CFC, FITS, TSMixer,
 TimesNet, TimeMixer, iTransformer, FiLM, Mamba, and MFTG-Net. The laboratory
