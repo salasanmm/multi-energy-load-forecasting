@@ -1,8 +1,19 @@
 import numpy as np
 import torch
+import os
+import importlib.util
 
 from get_config import get_config
-from test_model.TimeMixer import Model
+try:
+    from test_model.TimeMixer import Model
+except ModuleNotFoundError:
+    _model_file = os.path.join(os.path.dirname(__file__), "test_model", "MFGT-Net.py")
+    _model_spec = importlib.util.spec_from_file_location("mftg_net_impl", _model_file)
+    if _model_spec is None or _model_spec.loader is None:
+        raise ImportError(f"Cannot load proposed model from {_model_file}")
+    _model_module = importlib.util.module_from_spec(_model_spec)
+    _model_spec.loader.exec_module(_model_module)
+    Model = _model_module.Model
 from train import args, device, plow, channel_metrics, format_metrics, apply_refiner_mode
 from util import DataLoaderS
 
@@ -59,7 +70,16 @@ def blend_candidates(valid_true, valid_pred, test_pred, candidates):
 
 def main():
     config = get_config("TimeMixer")
-    data = DataLoaderS(args.data, 0.8, 0.1, device, args.horizon, args.seq_in_len, args.normalize)
+    data = DataLoaderS(
+        args.data,
+        getattr(config, "train_ratio", 0.5),
+        getattr(config, "valid_ratio", 0.2),
+        device,
+        args.horizon,
+        args.seq_in_len,
+        args.normalize,
+        exclude_columns=getattr(config, "exclude_columns", None),
+    )
     checkpoint = torch.load(args.save, map_location=device)
     model = Model(config).to(device)
     model.load_state_dict(checkpoint["model"])

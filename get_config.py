@@ -19,6 +19,16 @@ class BaseConfig:
         self.decomp_method = 'moving_avg'
         self.moving_avg = 24
         self.factor = 1
+        # Explicit names avoid conflating optimizer weight decay with the
+        # ReduceLROnPlateau reduction factor in experiment records.
+        # Shared training protocol used by every learned baseline and MFTG-Net.
+        # Architecture-specific values are defined in the subclasses below.
+        self.lr = 1.0e-3
+        self.batchsize = 256
+        self.epochs = 60
+        self.optimizer_weight_decay = 1.0e-5
+        self.lr_scheduler_factor = 0.5
+        self.lr_scheduler_patience = 4
 
 
 class PatchTSTConfig(BaseConfig):
@@ -30,9 +40,9 @@ class PatchTSTConfig(BaseConfig):
         self.d_ff = 128
         self.enc_in = 12
 
-        self.lr = 0.002
+        self.lr = 1.0e-3
         self.batchsize = 256
-        self.epochs = 40
+        self.epochs = 60
         self.weightdecay = 0.5
         self.decaypatience = 4
 
@@ -52,7 +62,10 @@ class TimeMixerConfig(BaseConfig):
         self.channel_independence = False  # 是否进行通道独立处理
         self.e_layers = 3  # 编码器层数
         self.down_sampling_layers = 2  # 下采样层数
-        self.enc_in = 12  # 输入通道数
+        # The primary experiment retains all 12 columns, including the
+        # hourly GHG feature supplied with the dataset. Set
+        # ``exclude_columns = ['GHG']`` for the matched ablation run.
+        self.enc_in = 12
         self.embed = 64  # 嵌入层维度
         self.d_model = 64  # 模型内部表示的维度
         self.freq = 'h'  # 数据的频率（如：'h'表示小时数据）
@@ -84,23 +97,35 @@ class TimeMixerConfig(BaseConfig):
         self.use_haf = True
         self.haf_init_scale = 0.02
         self.channel_loss_weights = [1.0, 1.0, 1.0]
+        self.exclude_columns = []
         self.train_mae_weight = 0.0005
-        self.train_ratio = 0.8
-        self.valid_ratio = 0.1
-        self.warm_start_path = './output/TimeMixer_24_168/model/model_lnn_best_633.pt'
-        self.protect_best_path = './output/TimeMixer_24_168/model/model_lnn_best_633.pt'
-        self.protect_best_mae = 579.1534
-        self.train_select_metric = 'test_mae'
+        # Chronological split used for the revised evaluation protocol.
+        # The remaining 30% is held out as an untouched test period.
+        self.train_ratio = 0.5
+        self.valid_ratio = 0.2
+        self.test_ratio = 0.3
+        self.seasonal_eval = True
+        # Retrain from scratch after changing the chronological split.
+        self.warm_start_path = None
+        self.protect_best_path = None
+        self.protect_best_mae = float('inf')
+        self.train_select_metric = 'valid_mae'
         self.output_best_test_path = './output/TimeMixer_24_168/model/model_lnn_best_test.pt'
         self.use_overlap_smooth = True
         self.overlap_smooth_blend = 1.0
         self.eval_only = False
 
-        self.lr = 0.00016
+        # The revised comparison uses the shared protocol in BaseConfig.
+        # Keep these aliases for older scripts that read weightdecay/
+        # decaypatience, while train.py uses the explicit scheduler fields.
+        self.lr = 1.0e-3
         self.batchsize = 256
         self.epochs = 60
-        self.weightdecay = 0.8
-        self.decaypatience = 6
+        self.weightdecay = 0.5
+        self.decaypatience = 4
+        self.optimizer_weight_decay = 1.0e-5
+        self.lr_scheduler_factor = 0.5
+        self.lr_scheduler_patience = 4
 
 
 class TimesNetConfig(BaseConfig):
@@ -137,11 +162,11 @@ class TimesNetConfig(BaseConfig):
         # Feed-forward layer dimension
         self.d_ff = 16  # Feed-forward层的维度
 
-        self.lr = 0.00008
+        self.lr = 1.0e-3
         self.batchsize = 256
-        self.epochs = 40
+        self.epochs = 60
         self.weightdecay = 0.8
-        self.decaypatience = 5
+        self.decaypatience = 4
 
 
 class TSMixerConfig(BaseConfig):
@@ -162,9 +187,9 @@ class TSMixerConfig(BaseConfig):
         self.enc_in = 12  # 输入特征维度 (例如：7个通道或7种特征)
         self.dec_in = 12  # 如果有解码器输入，通常与编码器相同
 
-        self.lr = 0.0008
+        self.lr = 1.0e-3
         self.batchsize = 256
-        self.epochs = 40
+        self.epochs = 60
         self.weightdecay = 0.5
         self.decaypatience = 4
 
@@ -177,11 +202,11 @@ class FITSConfig(BaseConfig):
         self.pred_len = 96
         self.individual = True
 
-        self.lr = 0.002
+        self.lr = 1.0e-3
         self.batchsize = 256
-        self.epochs = 50
+        self.epochs = 60
         self.weightdecay = 0.5
-        self.decaypatience = 5
+        self.decaypatience = 4
 
 
 class CFCConfig(BaseConfig):
@@ -196,11 +221,11 @@ class CFCConfig(BaseConfig):
         self.batch = 256
         self.pred_len = self.seq_out_len
 
-        self.lr = 0.001
+        self.lr = 1.0e-3
         self.batchsize = 256
-        self.epochs = 40
+        self.epochs = 60
         self.weightdecay = 0.8
-        self.decaypatience = 5
+        self.decaypatience = 4
 
 
 def get_config(model_name: str):
@@ -213,7 +238,7 @@ def get_config(model_name: str):
         return TimesNetConfig()
     if model_name == 'TSMixer':
         return TSMixerConfig()
-    if model_name == 'FITS' or 'FITSflops':
+    if model_name in ('FITS', 'FITSflops'):
         return FITSConfig()
     if model_name == 'CFC':
         return CFCConfig()

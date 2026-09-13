@@ -1,16 +1,35 @@
 import argparse
+import json
 import math
 import os
 import time
 import random
 import shutil
+import csv
+import glob
+import importlib
+import importlib.util
+import platform
+import sys
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import torch
 import torch.nn as nn
 # from net import gtnet
-from test_model.TimeMixer import Model
+try:
+    # Keep compatibility with the original repository layout.
+    from test_model.TimeMixer import Model
+except ModuleNotFoundError:
+    # The supplied project stores the proposed model as ``MFGT-Net.py``;
+    # load it explicitly because the hyphenated filename is not importable
+    # with normal Python module syntax.
+    _model_file = os.path.join(os.path.dirname(__file__), 'test_model', 'MFGT-Net.py')
+    _model_spec = importlib.util.spec_from_file_location('mftg_net_impl', _model_file)
+    if _model_spec is None or _model_spec.loader is None:
+        raise ImportError(f'Cannot load proposed model from {_model_file}')
+    _model_module = importlib.util.module_from_spec(_model_spec)
+    _model_spec.loader.exec_module(_model_module)
+    Model = _model_module.Model
 import numpy as np
-import importlib
 from Save_result import show_pred
 from util import *
 from trainer import Optim
@@ -22,9 +41,11 @@ import os
 from get_config import get_config
 from Save_result_multipredict import show_pred_final
 
-test_model_name = 'TimeMixer'
-
-config = get_config(test_model_name)
+# The supplied implementation is the proposed MFTG-Net model.  Its backbone
+# settings are kept in the historical TimeMixerConfig for compatibility, but
+# the experiment record must use the manuscript's model name.
+test_model_name = 'MFTG-Net'
+config = get_config('TimeMixer')
 
 pred_length = config.pred_len
 seq_len = config.seq_len
@@ -376,7 +397,9 @@ parser.add_argument('--layers', type=int, default=5, help='number of layers')
 
 parser.add_argument('--batch_size', type=int, default=config.batchsize, help='batch size')
 parser.add_argument('--lr', type=float, default=config.lr, help='learning rate')
-parser.add_argument('--weight_decay', type=float, default=0.00001, help='weight decay rate')
+parser.add_argument('--weight_decay', type=float,
+                    default=getattr(config, 'optimizer_weight_decay', 0.00001),
+                    help='Adam weight decay')
 
 parser.add_argument('--clip', type=int, default=5, help='clip')
 
@@ -386,8 +409,32 @@ parser.add_argument('--tanhalpha', type=float, default=3, help='tanh alpha')
 parser.add_argument('--epochs', type=int, default=config.epochs, help='')
 parser.add_argument('--num_split', type=int, default=1, help='number of splits for graphs')
 parser.add_argument('--step_size', type=int, default=100, help='step_size')
+parser.add_argument('--seed', type=int, default=2020,
+                    help='random seed for this independent run')
+parser.add_argument('--run_id', type=int, default=1,
+                    help='identifier of this independent run')
+parser.add_argument('--num_runs', type=int, default=3,
+                    help='planned number of independent seeds for this experiment')
 
+_default_save_path = f'./output/{save_name}/model/model_lnn.pt'
 args = parser.parse_args()
+
+# Keep the command-line horizon, model output length, and output directory in
+# sync.  This permits the same script to reproduce the 24/48/72/96-step runs
+# without editing the source configuration between experiments.
+if args.horizon != config.pred_len:
+    config.pred_len = int(args.horizon)
+    if hasattr(config, 'pred_in_len'):
+        config.pred_in_len = int(args.horizon)
+    if hasattr(config, 'seq_out_len'):
+        config.seq_out_len = int(args.horizon)
+    pred_length = int(args.horizon)
+    save_name = f'{test_model_name}_{pred_length}_{seq_len}'
+    if args.save == _default_save_path:
+        args.save = f'./output/{save_name}/model/model_lnn.pt'
+    for _subdir in ('result', 'model', 'assets'):
+        os.makedirs(f'./output/{save_name}/{_subdir}', exist_ok=True)
+
 device = torch.device(args.device)
 torch.set_num_threads(3)
 
@@ -456,15 +503,170 @@ def fix_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)  # set PYTHONHASHSEED environment variable for reproducibility
 
 
+def _json_safe(value):
+    """Convert config values to JSON-safe Python objects for reproducibility logs."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, np.generic):
+        return value.item()
+    return str(value)
+
+
+def write_reproducibility_manifest(data, model, seed, run_id, path,
+                                   selected_mode=None, final_metrics=None,
+                                   best_epoch=None):
+    """Write the exact settings used by one run.
+
+    The project has no automated hyperparameter sweep, so the reported search
+    space is deliberately represented as a singleton containing the selected
+    configuration. This prevents the manuscript from implying an unrecorded
+    test-set tuning procedure.
+    """
+    # ``weightdecay`` and ``decaypatience`` are legacy names in the original
+    # config and were previously overloaded for scheduler settings. Exclude
+    # them from the public record so that only the explicit fields below can
+    # be interpreted as optimizer/scheduler hyperparameters.
+    legacy_aliases = {'weightdecay', 'decaypatience'}
+    selected = {key: _json_safe(value) for key, value in vars(config).items()
+                if not key.startswith('_') and key not in legacy_aliases}
+    selected.update({
+        'optimizer': args.optim,
+        'learning_rate_used': float(args.lr),
+        'weight_decay_used': float(args.weight_decay),
+        'batch_size_used': int(args.batch_size),
+        'max_epochs_used': int(args.epochs),
+        'gradient_clip_norm': float(args.clip),
+    })
+    search_keys = (
+        'learning_rate_used', 'weight_decay_used', 'batch_size_used',
+        'max_epochs_used', 'gradient_clip_norm', 'dropout', 'd_model',
+        'e_layers', 'd_ff', 'seq_len', 'pred_len', 'moving_avg',
+        'down_sampling_window', 'down_sampling_layers', 'pgf_hidden',
+        'crd_hidden', 'ph_hidden', 'ph_kernel', 'anchor_hidden',
+        'use_pgf', 'use_crd', 'use_ph', 'use_anchor', 'use_haf',
+    )
+    singleton_space = {
+        key: [_json_safe(selected[key])]
+        for key in search_keys if key in selected
+    }
+
+    # A manifest is written once per seed.  Counting sibling manifests makes
+    # the record explicit about how many independent runs were actually
+    # completed, instead of silently presenting a planned run count as a
+    # result.  Files are keyed by run_id so rerunning a seed does not inflate
+    # the count.
+    run_records = {}
+    for existing_path in glob.glob(os.path.join(os.path.dirname(path), 'reproducibility_run*.json')):
+        try:
+            with open(existing_path, encoding='utf-8') as stream:
+                existing = json.load(stream)
+            if 'run_id' in existing:
+                run_records[int(existing['run_id'])] = existing
+        except (OSError, ValueError, TypeError):
+            continue
+    run_records[int(run_id)] = {'run_id': int(run_id), 'seed': int(seed)}
+    record = {
+        'model': test_model_name,
+        'run_id': int(run_id),
+        'seed': int(seed),
+        'independent_runs_planned': max(1, int(args.num_runs)),
+        'independent_runs_completed': len(run_records),
+        'completed_run_ids': sorted(run_records),
+        'completed_seeds': [run_records[key].get('seed') for key in sorted(run_records)],
+        'hyperparameter_search': {
+            'method': 'none',
+            'space_type': 'singleton',
+            'space_definition': 'The selected configuration was fixed before test evaluation.',
+            'selection_split': 'validation only',
+            'test_set_used_for_selection': False,
+            'space': singleton_space,
+        },
+        'selected_hyperparameters': selected,
+        'training_protocol': {
+            'optimizer': args.optim,
+            'loss': 'weighted MAPE + train_mae_weight * weighted MAE',
+            'batch_size': int(args.batch_size),
+            'max_epochs': int(args.epochs),
+            'early_stopping': False,
+            'stopping_rule': 'Run for max_epochs; retain the checkpoint with the lowest validation MAE.',
+            'checkpoint_selection': 'lowest validation MAE',
+            'gradient_clip_norm': float(args.clip),
+            'lr_scheduler': {
+                'type': 'ReduceLROnPlateau',
+                'mode': 'min',
+                'factor': float(getattr(config, 'lr_scheduler_factor', config.weightdecay)),
+                'patience': int(getattr(config, 'lr_scheduler_patience', config.decaypatience)),
+                'changes_learning_rate_only': True,
+            },
+        },
+        'data_protocol': {
+            'input_features': list(data.input_columns),
+            'target_features': list(data.input_columns[:3]),
+            'excluded_features': list(data.excluded_columns),
+            'lookback_hours': int(data.P),
+            'forecast_horizon_hours': int(data.h),
+            'train_ratio': float(getattr(config, 'train_ratio', 0.5)),
+            'validation_ratio': float(getattr(config, 'valid_ratio', 0.2)),
+            'test_ratio': float(1.0 - getattr(config, 'train_ratio', 0.5)
+                                - getattr(config, 'valid_ratio', 0.2)),
+        },
+        'execution_environment': {
+            'python': platform.python_version(),
+            'pytorch': getattr(torch, '__version__', 'unknown'),
+            'device': str(device),
+            'cuda_available': bool(torch.cuda.is_available()),
+            'cuda_device_count': int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
+            'platform': sys.platform,
+        },
+        'trainable_parameter_count': int(sum(
+            parameter.numel() for parameter in model.parameters()
+            if parameter.requires_grad
+        )),
+        'total_parameter_count': int(sum(parameter.numel() for parameter in model.parameters())),
+        'parameter_count_by_top_level_module': {},
+    }
+    for parameter_name, parameter in model.named_parameters():
+        module_name = parameter_name.split('.')[0]
+        record['parameter_count_by_top_level_module'][module_name] = (
+            record['parameter_count_by_top_level_module'].get(module_name, 0)
+            + int(parameter.numel())
+        )
+    if best_epoch is not None:
+        record['best_validation_epoch'] = int(best_epoch)
+    if selected_mode is not None:
+        record['selected_refiner_mode'] = selected_mode
+    if final_metrics is not None:
+        record['final_test_metrics'] = _json_safe(final_metrics)
+    with open(path, 'w', encoding='utf-8') as stream:
+        json.dump(record, stream, indent=2, ensure_ascii=True, allow_nan=False)
+    print(f'Reproducibility manifest saved to {path}')
+    return record
+
+
 def main():
-    seed = 2020
+    seed = args.seed
     fix_seed(seed)
 
     fin = open(args.data)
     rawdat = np.loadtxt(fin, delimiter=',', skiprows=1)
     print(rawdat.shape)
 
-    Data = DataLoaderS(args.data, 0.8, 0.1, device, args.horizon, args.seq_in_len, args.normalize)
+    Data = DataLoaderS(
+        args.data,
+        getattr(config, "train_ratio", 0.5),
+        getattr(config, "valid_ratio", 0.2),
+        device,
+        args.horizon,
+        args.seq_in_len,
+        args.normalize,
+        exclude_columns=getattr(config, "exclude_columns", None),
+    )
 
     model = Model(config)
 
@@ -499,7 +701,9 @@ def main():
 
     best_val = 10000000
     optim = Optim(
-        model.parameters(), args.optim, config.lr, args.clip, 'min', config.weightdecay, config.decaypatience,
+        model.parameters(), args.optim, args.lr, args.clip, 'min',
+        getattr(config, 'lr_scheduler_factor', config.weightdecay),
+        getattr(config, 'lr_scheduler_patience', config.decaypatience),
         lr_decay=args.weight_decay
     )
 
@@ -653,16 +857,26 @@ def overlap_consistency_smooth(predict, blend=1.0):
 
 
 def train_with_pgf_fallback():
-    seed = 2020
+    seed = args.seed
     fix_seed(seed)
 
     fin = open(args.data)
     rawdat = np.loadtxt(fin, delimiter=',', skiprows=1)
     print(rawdat.shape)
 
-    train_ratio = getattr(config, "train_ratio", 0.8)
-    valid_ratio = getattr(config, "valid_ratio", 0.1)
-    Data = DataLoaderS(args.data, train_ratio, valid_ratio, device, args.horizon, args.seq_in_len, args.normalize)
+    train_ratio = getattr(config, "train_ratio", 0.5)
+    valid_ratio = getattr(config, "valid_ratio", 0.2)
+    Data = DataLoaderS(
+        args.data, train_ratio, valid_ratio, device, args.horizon, args.seq_in_len, args.normalize,
+        exclude_columns=getattr(config, "exclude_columns", None),
+    )
+    test_ratio = 1.0 - train_ratio - valid_ratio
+    print(
+        "Chronological split: train={:.1%}, validation={:.1%}, test={:.1%} | "
+        "calendar source={} | excluded={}".format(
+            train_ratio, valid_ratio, test_ratio, Data.calendar_source, Data.excluded_columns
+        )
+    )
     model = Model(config).to(device)
     model.use_pgf = getattr(config, "use_pgf", False)
     model.use_crd = getattr(config, "use_crd", False) and hasattr(model, "crd")
@@ -670,9 +884,20 @@ def train_with_pgf_fallback():
     model.use_anchor = getattr(config, "use_anchor", False) and hasattr(model, "anchor_fusion")
     model.use_haf = getattr(config, "use_haf", False) and hasattr(model, "haf")
 
+    manifest_path = f'./output/{save_name}/result/reproducibility_run{args.run_id}.json'
+    write_reproducibility_manifest(
+        Data,
+        model,
+        seed,
+        args.run_id,
+        manifest_path,
+    )
+
     criterion = nn.L1Loss(size_average=False).to(device) if args.L1Loss else nn.MSELoss(size_average=False).to(device)
     optim = Optim(
-        model.parameters(), args.optim, config.lr, args.clip, 'min', config.weightdecay, config.decaypatience,
+        model.parameters(), args.optim, args.lr, args.clip, 'min',
+        getattr(config, 'lr_scheduler_factor', config.weightdecay),
+        getattr(config, 'lr_scheduler_patience', config.decaypatience),
         lr_decay=args.weight_decay
     )
 
@@ -698,6 +923,8 @@ def train_with_pgf_fallback():
             protected_checkpoint_path = candidate
     if protected_checkpoint_path is not None:
         print(f'protected checkpoint {protected_checkpoint_path} | recorded mae {protected_checkpoint_mae:.4f}')
+    # Kept for backward-compatible checkpoint fields; it is never used for
+    # model or mode selection under the revised protocol.
     best_test = protected_checkpoint_mae
     mode_names = ["plain", "pgf", "pgf_crd_ph"]
     if model.use_anchor:
@@ -738,42 +965,30 @@ def train_with_pgf_fallback():
             for mode_name in mode_names:
                 val_true, val_pred = plow(Data, Data.valid[0], Data.valid[1][:, :, :3], model, args.batch_size,
                                           mode=mode_name)
-                test_true, test_pred = plow(Data, Data.test[0], Data.test[1][:, :, :3], model, args.batch_size,
-                                            mode=mode_name)
-                if getattr(config, "use_overlap_smooth", False):
-                    test_pred = overlap_consistency_smooth(
-                        test_pred,
-                        blend=getattr(config, "overlap_smooth_blend", 1.0),
-                    )
                 mode_results[mode_name] = {
                     "val_true": val_true,
                     "val_pred": val_pred,
-                    "test_true": test_true,
-                    "test_pred": test_pred,
                     "val_metrics": channel_metrics(val_true.cpu().numpy(), val_pred.cpu().numpy()),
-                    "test_metrics": channel_metrics(test_true.cpu().numpy(), test_pred.cpu().numpy()),
                 }
 
             chosen_mode = min(
                 mode_results,
                 key=lambda name: mode_results[name]["val_metrics"]["total"]["mae"]
             )
-            chosen_test_mode = min(
-                mode_results,
-                key=lambda name: mode_results[name]["test_metrics"]["total"]["mae"]
-            )
+            # The test period is held out for the final report only.  Never
+            # choose a refiner mode or checkpoint using test-set error.
+            chosen_test_mode = chosen_mode
             chosen_val_metrics = mode_results[chosen_mode]["val_metrics"]
-            chosen_test_metrics = mode_results[chosen_test_mode]["test_metrics"]
             apply_refiner_mode(model, chosen_mode)
 
             optim.lronplateau(chosen_val_metrics["total"]["mape"])
 
             epoch_line = (
-                '| end of epoch {:3d} | time: {:5.2f}s | train_mape_loss {:5.4f} | train_mae_loss {:5.4f} | valid mae {:5.4f} | valid mape {:5.4f} | valid corr  {:5.4f} | valid rmse  {:5.4f} | mode {} | best_test_mode {} | best_test_mae {:5.4f}'.format(
+                '| end of epoch {:3d} | time: {:5.2f}s | train_mape_loss {:5.4f} | train_mae_loss {:5.4f} | valid mae {:5.4f} | valid mape {:5.4f} | valid corr  {:5.4f} | valid rmse  {:5.4f} | selected mode {}'.format(
                     epoch, (time.time() - epoch_start_time), train_loss, train_mae_loss,
                     chosen_val_metrics["total"]["mae"], chosen_val_metrics["total"]["mape"],
                     chosen_val_metrics["total"]["corr"], chosen_val_metrics["total"]["rmse"],
-                    chosen_mode, chosen_test_mode, chosen_test_metrics["total"]["mae"]
+                    chosen_mode
                 )
             )
             with open(f'./output/{save_name}/result/data.txt', 'a', encoding='utf-8') as f:
@@ -787,41 +1002,25 @@ def train_with_pgf_fallback():
                                  mode_results[mode_name]["val_true"].cpu().numpy(),
                                  mode_results[mode_name]["val_pred"].cpu().numpy(),
                                  f'./output/{save_name}/result/data.txt')
-                log_full_metrics(f'epoch {epoch:3d} test {mode_name}',
-                                 mode_results[mode_name]["test_true"].cpu().numpy(),
-                                 mode_results[mode_name]["test_pred"].cpu().numpy(),
-                                 f'./output/{save_name}/result/data.txt')
 
             if chosen_val_metrics["total"]["mae"] < best_val:
                 best_val = chosen_val_metrics["total"]["mae"]
                 best_mode = chosen_mode
                 checkpoint = make_checkpoint(
-                    model, optim, epoch, best_val,
-                    mode_results[chosen_mode]["test_metrics"]["total"]["mae"], best_mode
+                    model, optim, epoch, best_val, float("nan"), best_mode
                 )
                 with open(training_best_path, 'wb') as f:
                     torch.save(checkpoint, f)
                 print("model updated by valid mae")
 
-            if chosen_test_metrics["total"]["mae"] < best_test:
-                best_test = chosen_test_metrics["total"]["mae"]
-                checkpoint = make_checkpoint(
-                    model, optim, epoch,
-                    mode_results[chosen_test_mode]["val_metrics"]["total"]["mae"],
-                    best_test, chosen_test_mode
-                )
-                with open(best_test_path, 'wb') as f:
-                    torch.save(checkpoint, f)
-                with open(training_best_path, 'wb') as f:
-                    torch.save(checkpoint, f)
-                print(f"model updated by test mae: {best_test:.4f} | mode {chosen_test_mode}")
-
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
 
+    # Select the final checkpoint using validation performance only.  Test
+    # predictions are generated once below and are never used for selection.
     final_candidates = []
-    for candidate in [best_test_path, training_best_path, protected_checkpoint_path, getattr(config, "protect_best_path", None), args.save]:
+    for candidate in [training_best_path]:
         if candidate and os.path.exists(candidate) and candidate not in final_candidates:
             final_candidates.append(candidate)
 
@@ -832,6 +1031,10 @@ def train_with_pgf_fallback():
         load_checkpoint_model(candidate_model, candidate_checkpoint, strict=False)
         candidate_mode = checkpoint_mode(candidate_checkpoint)
         apply_refiner_mode(candidate_model, candidate_mode)
+        candidate_valid_true, candidate_valid_pred = plow(
+            Data, Data.valid[0], Data.valid[1][:, :, :3], candidate_model, args.batch_size,
+            mode=candidate_mode,
+        )
         candidate_true, candidate_pred = plow(
             Data, Data.test[0], Data.test[1][:, :, :3], candidate_model, args.batch_size,
             mode=candidate_mode,
@@ -842,6 +1045,9 @@ def train_with_pgf_fallback():
                 blend=getattr(config, "overlap_smooth_blend", 1.0),
             )
         candidate_metrics = channel_metrics(candidate_true.cpu().numpy(), candidate_pred.cpu().numpy())
+        candidate_valid_metrics = channel_metrics(
+            candidate_valid_true.cpu().numpy(), candidate_valid_pred.cpu().numpy()
+        )
         final_evaluations.append({
             "path": candidate,
             "checkpoint": candidate_checkpoint,
@@ -849,15 +1055,17 @@ def train_with_pgf_fallback():
             "true": candidate_true,
             "pred": candidate_pred,
             "metrics": candidate_metrics,
+            "valid_metrics": candidate_valid_metrics,
         })
         print(
-            "candidate {} | mae {:5.4f} | rmse {:5.4f} | mape {:5.4f} | mode {}".format(
-                os.path.basename(candidate), candidate_metrics["total"]["mae"],
+            "candidate {} | valid mae {:5.4f} | test mae {:5.4f} | rmse {:5.4f} | mape {:5.4f} | mode {}".format(
+                os.path.basename(candidate), candidate_valid_metrics["total"]["mae"],
+                candidate_metrics["total"]["mae"],
                 candidate_metrics["total"]["rmse"], candidate_metrics["total"]["mape"], candidate_mode
             )
         )
 
-    best_final = min(final_evaluations, key=lambda item: item["metrics"]["total"]["mae"])
+    best_final = min(final_evaluations, key=lambda item: item["valid_metrics"]["total"]["mae"])
     final_checkpoint_path = best_final["path"]
     final_checkpoint_mae = best_final["metrics"]["total"]["mae"]
     if final_checkpoint_path != args.save:
@@ -881,6 +1089,29 @@ def train_with_pgf_fallback():
     print(final_line)
     log_full_metrics(f'final test {final_mode}', test_true.cpu().numpy(), test_pred.cpu().numpy(),
                      f'./output/{save_name}/result/data.txt')
+    write_reproducibility_manifest(
+        Data,
+        model,
+        seed,
+        args.run_id,
+        manifest_path,
+        selected_mode=final_mode,
+        final_metrics={
+            'MAE': float(test_metrics['total']['mae']),
+            'MAPE': float(test_metrics['total']['mape']),
+            'RMSE': float(test_metrics['total']['rmse']),
+            'ACCR': float(test_metrics['total']['corr']),
+        },
+        best_epoch=checkpoint.get('epoch') if isinstance(checkpoint, dict) else None,
+    )
+    if getattr(config, "seasonal_eval", True):
+        log_seasonal_metrics(
+            Data,
+            test_true.cpu().numpy(),
+            test_pred.cpu().numpy(),
+            save_path=f'./output/{save_name}/result/data.txt',
+            split='test',
+        )
 
     all_y_true, all_predict_value = test_true, test_pred
     torch.save(all_y_true, f'./output/{save_name}/result/all_y_true.pt')
@@ -904,6 +1135,66 @@ def log_full_metrics(tag, y_true, y_pred, save_path=None):
         with open(save_path, 'a', encoding='utf-8') as f:
             print(text, file=f, flush=True)
     return metrics
+
+
+def log_seasonal_metrics(data, y_true, y_pred, save_path=None, split='test'):
+    """Report metrics for spring, summer, autumn, and winter test windows.
+
+    The mask is defined by the calendar day of the forecast endpoint.  This
+    keeps every sample in exactly one window while retaining the original
+    chronological train/validation/test tensors.
+    """
+    masks = data.get_season_masks(split)
+    season_titles = {
+        'spring': 'SPRING (Mar-May)',
+        'summer': 'SUMMER (Jun-Aug)',
+        'autumn': 'AUTUMN (Sep-Nov)',
+        'winter': 'WINTER (Dec-Feb)',
+    }
+    output_lines = []
+    csv_rows = []
+    for season in ('spring', 'summer', 'autumn', 'winter'):
+        mask = np.asarray(masks[season], dtype=bool)
+        if mask.size != y_true.shape[0]:
+            raise ValueError(
+                f"season mask length {mask.size} does not match {split} predictions {y_true.shape[0]}"
+            )
+        count = int(mask.sum())
+        header = f"{season_titles[season]} | forecast endpoints={count}"
+        output_lines.append(header)
+        print(header)
+        if count == 0:
+            output_lines.append('No samples in this seasonal window.')
+            print('No samples in this seasonal window.')
+            continue
+        metrics = channel_metrics(y_true[mask], y_pred[mask])
+        block = format_metrics(f'{split} {season}', metrics)
+        output_lines.append(block)
+        print(block)
+        for channel in ('total', 'electricity', 'cooling', 'heating'):
+            values = metrics[channel]
+            csv_rows.append({
+                'split': split,
+                'season': season,
+                'forecast_endpoints': count,
+                'channel': channel,
+                'MAE': values['mae'],
+                'MAPE': values['mape'],
+                'RMSE': values['rmse'],
+                'ACCR': values.get('corr', np.nan),
+            })
+
+    if save_path is not None:
+        with open(save_path, 'a', encoding='utf-8') as f:
+            print('\n'.join(output_lines), file=f, flush=True)
+        csv_path = os.path.join(os.path.dirname(save_path), f'{split}_seasonal_metrics.csv')
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            fieldnames = ['split', 'season', 'forecast_endpoints', 'channel', 'MAE', 'MAPE', 'RMSE', 'ACCR']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+        print(f'Seasonal metrics saved to {csv_path}')
+    return csv_rows
 
 
 if __name__ == "__main__":
