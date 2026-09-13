@@ -1,0 +1,4 @@
+# Optional dependencies for baseline-specific utilities.
+# Install versions compatible with the local PyTorch installation.
+ptflops
+mamba-ssm

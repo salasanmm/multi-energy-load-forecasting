@@ -1,6 +1,9 @@
 # Reproducibility protocol
 
 This file records the protocol used for the revised MFTG-Net experiments.
+The model-by-model settings and manuscript parameter counts are maintained in
+[`BASELINE_CONFIGS.md`](BASELINE_CONFIGS.md) and
+[`configs/baseline_registry.json`](configs/baseline_registry.json).
 
 ## Data and task
 
@@ -65,3 +68,9 @@ invent averages for them.
 The repository includes the source code, data files, dependency list, fixed
 protocol, and reproducibility utilities. Generated checkpoints are ignored by
 Git and can be regenerated with the commands above.
+
+The original project contains source files for DLinear, CFC, FITS, TSMixer,
+TimesNet, TimeMixer, iTransformer, FiLM, Mamba, and MFTG-Net. SparseTSF and
+TimeXer are listed in the manuscript but were not present in the original
+source tree; their external implementation and version must be recorded before
+claiming source-level reproduction of those two baselines.
