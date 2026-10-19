@@ -26,8 +26,7 @@ logs/
 .DS_Store
 Thumbs.db
 
-# The archived laboratory TimeMixer checkpoints are intentionally versioned
-# for baseline verification; other generated checkpoints remain ignored.
-!artifacts/
-!artifacts/original_time_mixer/
-!artifacts/original_time_mixer/**/*.pt
+# Experimental outputs, checkpoints, and downloaded datasets stay outside the
+# source-only repository.
+datasets/
+bdg2_test.zip
