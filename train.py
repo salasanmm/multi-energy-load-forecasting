@@ -18,7 +18,7 @@ import torch.nn as nn
 # The proposed model is stored in a hyphenated filename, so it must be loaded
 # explicitly. Keep this independent from the separately released TimeMixer
 # baseline in ``test_model/TimeMixer.py``.
-_model_file = os.path.join(os.path.dirname(__file__), 'test_model', 'MFGT-Net.py')
+_model_file = os.path.join(os.path.dirname(__file__), 'test_model', 'MFTG-Net.py')
 _model_spec = importlib.util.spec_from_file_location('mftg_net_impl', _model_file)
 if _model_spec is None or _model_spec.loader is None:
     raise ImportError(f'Cannot load proposed model from {_model_file}')

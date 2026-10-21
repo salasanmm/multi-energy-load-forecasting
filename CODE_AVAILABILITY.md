@@ -7,16 +7,15 @@ baseline.
 ## Current proposed model
 
 - Model name in the manuscript: `MFTG-Net`.
-- Current modified implementation: `test_model/MFGT-Net.py`.
+- Current modified implementation: `test_model/MFTG-Net.py`.
 - Training and evaluation entry point: `train.py`.
 - Input data: `data/dataset_input_jiuzheng.csv`.
 - Fixed protocol and run-manifest format: `REPRODUCIBILITY.md`.
 - Baseline architecture and parameter register: `BASELINE_CONFIGS.md` and
   `configs/baseline_registry.json`.
 
-The filename `MFGT-Net.py` is retained from the modified project for backward
-compatibility. It is not the name of a second model; all manuscript references
-use `MFTG-Net`.
+The implementation filename is `MFTG-Net.py`, matching the model name used in
+the manuscript and all experiment manifests.
 
 ## Reproducing the reported pipeline
 

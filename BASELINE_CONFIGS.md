@@ -49,7 +49,7 @@ the corresponding table result.
 | FiLM | `test_model/FiLM.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, multiscale factors `[1,2,4]`, HiPPO order `256`, spectral modes up to `32`, ratio `0.5` | included |
 | TimeXer | no source file in the original project | `seq_len=168`, `pred_len=H`, `enc_in=12` | external implementation and commit must be recorded |
 | Mamba | `test_model/Mamba.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `expand=2`, `d_conv=4`; `d_model`, `d_state`, and output dimensions require the run manifest | source included; `mamba-ssm` dependency required |
-| MFTG-Net (ours) | `test_model/MFGT-Net.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=64`, `d_ff=64`, `e_layers=3`, PDM downsampling `2 x 2`, PGF/CRD/PH/Anchor/HAF enabled | included |
+| MFTG-Net (ours) | `test_model/MFTG-Net.py` | `seq_len=168`, `pred_len=H`, `enc_in=12`, `d_model=64`, `d_ff=64`, `e_layers=3`, PDM downsampling `2 x 2`, PGF/CRD/PH/Anchor/HAF enabled | included |
 
 ## Parameter counts reported in the manuscript
 

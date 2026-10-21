@@ -1,7 +1,7 @@
 # Reproducibility protocol
 
 This file records the protocol used for the revised MFTG-Net experiments. The
-current modified model is loaded from `test_model/MFGT-Net.py` by the root
+current modified model is loaded from `test_model/MFTG-Net.py` by the root
 `train.py` entry point; the separate legacy TimeMixer archive is not used by
 the revised model.
 The model-by-model settings and manuscript parameter counts are maintained in

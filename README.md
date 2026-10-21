@@ -3,7 +3,7 @@
 This repository contains the modified implementation and reproducibility
 materials for MFTG-Net, a multi-energy load forecasting model for electricity,
 cooling, and heating loads. The current proposed model is implemented in
-`test_model/MFGT-Net.py` and is launched by the root-level `train.py` script.
+`test_model/MFTG-Net.py` and is launched by the root-level `train.py` script.
 The implementation uses Python and PyTorch.
 
 ## Requirements
@@ -102,9 +102,8 @@ not label randomly initialized or legacy checkpoints as MFTG-Net weights.
 
 The `test_model/` directory retains the model implementations used for the
 comparison tables. The proposed model must be run through the root `train.py`,
-which explicitly loads `test_model/MFGT-Net.py`. The source filename is retained
-for backward compatibility; the model name used in the manuscript and manifests
-is `MFTG-Net`.
+which explicitly loads `test_model/MFTG-Net.py`. The source filename and the
+model name used in the manuscript and manifests are `MFTG-Net`.
 
 ## Citation
 
