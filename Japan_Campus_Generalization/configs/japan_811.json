@@ -1,0 +1,39 @@
+{
+  "dataset": "Kitakyushu campus 2019 hourly load series",
+  "source": "Author public figure workbook, sheet All load1_2004&2019; DOI 10.6084/m9.figshare.24978645",
+  "data": "data/processed/kitakyushu_2019_hourly.csv",
+  "targets": ["electricity_kw", "cooling_kw", "heating_kw"],
+  "units": "kW",
+  "input_length": 168,
+  "forecast_horizons": [24, 48, 72, 96],
+  "split": {"method": "chronological", "train_ratio": 0.8, "validation_ratio": 0.1, "test_ratio": 0.1},
+  "evaluation": {
+    "protocol": "rolling_overlap_average",
+    "prediction_origins": "one per hour",
+    "checkpoint_selection": "validation rolling-overlap MAE",
+    "test_used_for_selection": false
+  },
+  "training": {
+    "models": ["MFTG-Net", "TimeMixer", "Autoformer", "DLinear", "PatchTST"],
+    "seeds": [2020, 2021, 2022],
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001,
+    "batch_size": 128,
+    "epochs": 60,
+    "gradient_clip_norm": 5.0,
+    "loss": "MAPE with 1e-3 normalized-target epsilon plus 0.0005 * MAE",
+    "normalization": "per-target maximum absolute value from training partition only"
+  },
+  "mftg_net": {
+    "decomposition": "temporal DFT top-k",
+    "top_k": 5,
+    "d_model": 64,
+    "d_ff": 64,
+    "e_layers": 3,
+    "down_sampling_window": 2,
+    "down_sampling_layers": 2,
+    "refinement_modules": "enabled"
+  },
+  "baseline_hyperparameters": "fixed per-model configurations in run/run_japan_811.py; no test-set tuning"
+}

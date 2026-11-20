@@ -1,0 +1,52 @@
+{
+  "dataset": "Kitakyushu campus building energy system",
+  "source_workbook": "data/source/Scientific_data_Figure.xlsx",
+  "source_sheet": "All load1_2004&2019",
+  "source_columns": [
+    "Electricity load_2019 (kW)",
+    "Cooling load_2019 (kW)",
+    "Heating load_2019 (kW)",
+    "Temp_2019 (℃)",
+    "Hot water load_2019 (kW)"
+  ],
+  "target_columns": [
+    "electricity_kw",
+    "cooling_kw",
+    "heating_kw"
+  ],
+  "year": 2019,
+  "timestamp_policy": "8760 chronological hourly records; timestamps reconstructed from 2019-01-01 because the figure workbook uses a leap-year plotting calendar with Feb 29 omitted",
+  "rows": 8760,
+  "units": "kW",
+  "missing_values": 0,
+  "note": "This is the hourly 2019 series included in the authors' public figure workbook, not the complete 20-year Figshare source release.",
+  "input_columns": [
+    "electricity_kw",
+    "cooling_kw",
+    "heating_kw",
+    "outdoor_temp_c",
+    "hot_water_kw",
+    "hour_sin",
+    "hour_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "yearday_sin",
+    "yearday_cos",
+    "is_weekend"
+  ],
+  "auxiliary_observed_columns": [
+    "outdoor_temp_c",
+    "hot_water_kw"
+  ],
+  "calendar_columns": [
+    "hour_sin",
+    "hour_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "yearday_sin",
+    "yearday_cos",
+    "is_weekend"
+  ],
+  "auxiliary_data_policy": "Only historical weather and hot-water observations enter each input window; future observed values are never supplied.",
+  "output": "data\\processed\\kitakyushu_2019_hourly_with_aux.csv"
+}

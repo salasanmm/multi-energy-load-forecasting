@@ -1,0 +1,33 @@
+{
+  "model": "MFTG-Net and four baselines",
+  "experiment_tag": "dft_top5_613_seasonal24h",
+  "purpose": "Supplementary experiment for the reviewer request to evaluate test performance across all four seasons",
+  "data": "data/dataset_input_jiuzheng.csv",
+  "target_columns": ["KW", "CHWTON", "HTmmBTU"],
+  "input_length": 168,
+  "forecast_horizon": 24,
+  "split": {
+    "method": "chronological",
+    "train_ratio": 0.6,
+    "validation_ratio": 0.1,
+    "test_ratio": 0.3,
+    "train_end_row_exclusive": 14284,
+    "validation_end_row_exclusive": 16664,
+    "test_target_rows": [16664, 23807]
+  },
+  "evaluation": {
+    "protocol": "rolling_overlap_average",
+    "season_metrics": "target timestamps after overlap averaging",
+    "test_used_for_selection": false,
+    "purpose_note": "The 6:1:3 split is used specifically to ensure the chronological test segment covers spring, summer, autumn, and winter; the 8:1:1 split remains the primary experiment."
+  },
+  "training": {
+    "models": ["MFTG-Net", "TimeMixer", "Autoformer", "DLinear", "PatchTST"],
+    "seeds": [2020, 2021, 2022],
+    "epochs": 60,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001
+  },
+  "output_directory": "output6_1_3/main_experiment"
+}
